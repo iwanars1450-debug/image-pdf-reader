@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <application android:theme="@style/AppTheme" android:label="Image PDF Reader" android:allowBackup="false" android:supportsRtl="true" android:icon="@drawable/ic_app" android:enableOnBackInvokedCallback="false">
+        <activity android:name=".MainActivity" android:exported="true" android:screenOrientation="portrait" android:configChanges="orientation|screenSize" android:windowSoftInputMode="adjustNothing">
+            <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+            <!-- MIME-only local document handler, intentionally not a web app link. -->
+            <intent-filter tools:ignore="AppLinkUrlError"><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><data android:mimeType="application/pdf"/></intent-filter>
+        </activity>
+        <provider android:name=".ShareProvider" android:authorities="jp.local.imagepdf.share" android:exported="false" android:grantUriPermissions="true"/>
+    </application>
+</manifest>

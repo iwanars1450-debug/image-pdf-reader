@@ -203,6 +203,9 @@ class MainActivity: Activity() {
         reader=view;frame.addView(view,FrameLayout.LayoutParams(-1,-1))
         val title=book?.name?:runCatching { library.source(uri!!).name }.getOrDefault("document.pdf")
         val bar=toolbar(title,true).apply { setBackgroundColor(0xC0303034.toInt());isClickable=true }
+        val pageLabel=text("",16f).apply { setTextColor(Color.WHITE);setPadding(d(8),0,d(12),0) }
+        bar.addView(pageLabel,LinearLayout.LayoutParams(-2,d(56)))
+        view.pageDisplay={ current,total -> pageLabel.text="$current / $total" }
         if(book==null) bar.addView(button("ライブラリに追加") { importTarget=null;chooseTarget(listOf(library.source(uri!!)),uri) })
         readerBar=bar;frame.addView(bar,FrameLayout.LayoutParams(-1,-2,Gravity.TOP));bar.visibility=View.GONE
         host.addView(frame,FrameLayout.LayoutParams(-1,-1));hideReaderUi()

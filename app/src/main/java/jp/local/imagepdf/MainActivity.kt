@@ -20,6 +20,7 @@ class MainActivity: Activity() {
     private var page="home";private var workId: String?=null
     private var grid: GridView?=null
     private val gridPositions=mutableMapOf<String,Pair<Int,Int>>()
+    private var homeGridState: Parcelable?=null
     private var query="";private var searchTab=0
     private val selected=linkedSetOf<String>()
     private var reader: ReaderView?=null;private var readerFrame: FrameLayout?=null;private var readerBar: View?=null
@@ -53,7 +54,7 @@ class MainActivity: Activity() {
         if(back) addView(button("←") { onBackPressed() },LinearLayout.LayoutParams(d(52),d(52)))
         addView(text(title,20f),LinearLayout.LayoutParams(0,d(56),1f))
     }
-    private fun rememberGrid() { grid?.let { gridPositions[gridKey()]=it.firstVisiblePosition to (it.getChildAt(0)?.top?:0) } }
+    private fun rememberGrid() { grid?.let { gridPositions[gridKey()]=it.firstVisiblePosition to (it.getChildAt(0)?.top?:0);if(page=="home") homeGridState=it.onSaveInstanceState() } }
     private fun gridKey()=if(page=="work") "work:$workId" else if(page=="search") "search:$searchTab" else "home"
     private fun showLibrary() {
         if(isFinishing) return
@@ -85,7 +86,22 @@ class MainActivity: Activity() {
             else { selected.add(item.first);updateSelection(selectionBar);(grid!!.adapter as Cards).notifyDataSetChanged() };true
         }
         grid?.setOnDragListener { v,event -> when(event.action) { DragEvent.ACTION_DRAG_STARTED -> true;DragEvent.ACTION_DRAG_LOCATION -> { val g=v as GridView;if(event.y<d(60)) g.smoothScrollBy(-d(50),100) else if(event.y>g.height-d(60)) g.smoothScrollBy(d(50),100);true };DragEvent.ACTION_DROP -> { val g=v as GridView;val to=g.pointToPosition(event.x.toInt(),event.y.toInt());val adapter=g.adapter as Cards;val from=adapter.items.indexOfFirst { it.first==event.localState as? String };if(from>=0&&to>=0) { val ids=adapter.items.map { it.first }.toMutableList();val key=ids.removeAt(from);ids.add(to.coerceAtMost(ids.size),key);library.reorder(page=="home",ids);rememberGrid();showLibrary() };true };else -> true } }
-        gridPositions[gridKey()]?.let { (index,top) -> grid?.post { grid?.setSelectionFromTop(index,top) } }
+        if(page=="home") gridPositions["home"]?.let { (index,top) ->
+            val homeGrid=grid!!
+            homeGridState?.let { homeGrid.onRestoreInstanceState(it) }
+            homeGrid.viewTreeObserver.addOnPreDrawListener(object: ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    homeGrid.viewTreeObserver.removeOnPreDrawListener(this)
+                    if(grid!==homeGrid||page!="home"||homeGrid.count==0) return true
+                    // GridView restores nonzero rows through its native state. Its first-row
+                    // state omits a partial offset; correct that pixel delta before drawing.
+                    val child=homeGrid.getChildAt(0)?:return true
+                    if(homeGrid.firstVisiblePosition==index) homeGrid.scrollListBy(child.top-top)
+                    return true
+                }
+            })
+        }
+        else gridPositions[gridKey()]?.let { (index,top) -> grid?.post { grid?.setSelectionFromTop(index,top) } }
         if(page=="home") host.addView(button("＋") { importTarget=null;addMenu(true) },FrameLayout.LayoutParams(d(64),d(64),Gravity.BOTTOM or Gravity.END).apply { bottomMargin=d(36);rightMargin=d(20) })
     }
     private fun fillGrid() {

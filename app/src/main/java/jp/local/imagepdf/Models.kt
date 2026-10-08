@@ -3,7 +3,9 @@ package jp.local.imagepdf
 import org.json.JSONObject
 import java.math.BigInteger
 
-data class Work(val id: String, val name: String, val order: Int, val updated: Long, val read: Long, val columns: Int, val sort: String, val descending: Boolean)
+data class Work(val id: String, val name: String, val order: Int, val updated: Long, val read: Long, val columns: Int, val sort: String, val descending: Boolean, val parent: String? = null)
+
+data class LibraryItem(val id: String, val folder: Boolean, val name: String, val order: Int, val updated: Long, val read: Long)
 data class Book(val id: String, val work: String, val name: String, val pages: Int, val order: Int, val updated: Long, val read: Long, val page: Int, val offset: Float)
 data class Preferences(val volume: Boolean = true, val step: Int = 25, val speed: Int = 2, val gap: Int = 8, val zoom: Boolean = true, val reopen: Boolean = true, val crop: Boolean = false) {
     fun json() = JSONObject().put("volume",volume).put("step",step).put("speed",speed).put("gap",gap).put("zoom",zoom).put("reopen",reopen).put("crop",crop)

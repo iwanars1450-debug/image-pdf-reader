@@ -69,9 +69,9 @@ class MainActivity: Activity() {
             edit.addTextChangedListener(object: TextWatcher { override fun beforeTextChanged(s: CharSequence?,start: Int,count: Int,after: Int) {} ;override fun onTextChanged(s: CharSequence?,start: Int,before: Int,count: Int) { query=s.toString();gridPositions.remove(gridKey());fillGrid() };override fun afterTextChanged(e: Editable?) {} })
         } else {
             val controls=row()
-            controls.addView(button("並び替え") { sortDialog() },LinearLayout.LayoutParams(0,d(48),1f))
+            if(page=="home"||library.work(workId!!).parent==null) controls.addView(button("並び替え") { sortDialog() },LinearLayout.LayoutParams(0,d(48),1f))
             controls.addView(button("列数") { rememberGrid();if(page=="home") library.columns=if(library.columns==2) 3 else 2 else { val w=library.works().first { it.id==workId };library.workOptions(w.id,if(w.columns==2) 3 else 2,w.sort,w.descending) };showLibrary() })
-            if(page=="work") controls.addView(button("PDFを追加") { importTarget=workId;addMenu(false) })
+            if(page=="work") controls.addView(button(if(library.work(workId!!).parent==null) "追加" else "PDFを追加") { importTarget=workId;addMenu(false) })
             base.addView(controls)
         }
         val selectionBar=row();selectionBar.visibility=View.GONE;base.addView(selectionBar)
@@ -85,7 +85,7 @@ class MainActivity: Activity() {
             if(currentSort()=="manual"&&page!="search") { AlertDialog.Builder(this).setItems(arrayOf("ドラッグして並べ替え","選択 / 名前変更 / 削除")) { _,which -> if(which==0) { val clip=ClipData.newPlainText("order",item.first);grid!!.getChildAt(position-grid!!.firstVisiblePosition)?.startDragAndDrop(clip,View.DragShadowBuilder(grid!!.getChildAt(position-grid!!.firstVisiblePosition)),item.first,0) } else { selected.add(item.first);updateSelection(selectionBar);(grid!!.adapter as Cards).notifyDataSetChanged() } }.show() }
             else { selected.add(item.first);updateSelection(selectionBar);(grid!!.adapter as Cards).notifyDataSetChanged() };true
         }
-        grid?.setOnDragListener { v,event -> when(event.action) { DragEvent.ACTION_DRAG_STARTED -> true;DragEvent.ACTION_DRAG_LOCATION -> { val g=v as GridView;if(event.y<d(60)) g.smoothScrollBy(-d(50),100) else if(event.y>g.height-d(60)) g.smoothScrollBy(d(50),100);true };DragEvent.ACTION_DROP -> { val g=v as GridView;val to=g.pointToPosition(event.x.toInt(),event.y.toInt());val adapter=g.adapter as Cards;val from=adapter.items.indexOfFirst { it.first==event.localState as? String };if(from>=0&&to>=0) { val ids=adapter.items.map { it.first }.toMutableList();val key=ids.removeAt(from);ids.add(to.coerceAtMost(ids.size),key);library.reorder(page=="home",ids);rememberGrid();showLibrary() };true };else -> true } }
+        grid?.setOnDragListener { v,event -> if(currentSort()!="manual"||page=="search") false else when(event.action) { DragEvent.ACTION_DRAG_STARTED -> true;DragEvent.ACTION_DRAG_LOCATION -> { val g=v as GridView;if(event.y<d(60)) g.smoothScrollBy(-d(50),100) else if(event.y>g.height-d(60)) g.smoothScrollBy(d(50),100);true };DragEvent.ACTION_DROP -> { val g=v as GridView;val to=g.pointToPosition(event.x.toInt(),event.y.toInt());val adapter=g.adapter as Cards;val from=adapter.items.indexOfFirst { it.first==event.localState as? String };if(from>=0&&to>=0) { val ids=adapter.items.map { it.first }.toMutableList();val key=ids.removeAt(from);ids.add(to.coerceAtMost(ids.size),key);if(page=="home") library.reorder(true,ids) else library.reorderContents(workId!!,ids);rememberGrid();showLibrary() };true };else -> true } }
         if(page=="home") gridPositions["home"]?.let { (index,top) ->
             val homeGrid=grid!!
             homeGridState?.let { homeGrid.onRestoreInstanceState(it) }
@@ -107,8 +107,8 @@ class MainActivity: Activity() {
     private fun fillGrid() {
         val items=mutableListOf<Pair<String,Boolean>>()
         if(page=="home") items.addAll(library.orderedWorks().map { it.id to true })
-        else if(page=="work") items.addAll(library.orderedBooks(workId!!).map { it.id to false })
-        else { if(searchTab!=2) items.addAll(library.orderedWorks().filter { it.name.contains(query,true) }.map { it.id to true });if(searchTab!=1) items.addAll(library.books().filter { it.name.contains(query,true) }.sortedWith { a,b -> NaturalOrder.compare(a.name,b.name) }.map { it.id to false }) }
+        else if(page=="work") items.addAll(library.contents(workId!!).map { it.id to it.folder })
+        else { if(searchTab!=2) items.addAll(library.orderedWorks(true).filter { it.name.contains(query,true) }.map { it.id to true });if(searchTab!=1) items.addAll(library.books().filter { it.name.contains(query,true) }.sortedWith { a,b -> NaturalOrder.compare(a.name,b.name) }.map { it.id to false }) }
         grid?.adapter=Cards(items)
     }
     private inner class Cards(val items: List<Pair<String,Boolean>>): BaseAdapter() {
@@ -134,21 +134,40 @@ class MainActivity: Activity() {
         bar.removeAllViews();bar.visibility=if(selected.isEmpty()) View.GONE else View.VISIBLE;if(selected.isEmpty()) return
         bar.addView(button("${selected.size}件 / 全選択") { selected.addAll((grid!!.adapter as Cards).items.map { it.first });updateSelection(bar);(grid!!.adapter as Cards).notifyDataSetChanged() })
         bar.addView(button("操作") {
-            val allWorks=selected.all { id -> library.works().any { it.id==id } };val allBooks=selected.all { library.book(it)!=null };val actions=mutableListOf("削除","書き出し");if(allBooks) actions.add("共有");if(selected.size==1) actions.add("名前変更")
+            val allWorks=selected.all { id -> library.works().any { it.id==id } };val allBooks=selected.all { library.book(it)!=null };val actions=mutableListOf("削除","書き出し");if(selected.all { id -> library.book(id)!=null||library.works().any { it.id==id&&it.parent!=null } }) actions.add("移動");if(allBooks) actions.add("共有");if(selected.size==1) actions.add("名前変更")
             AlertDialog.Builder(this).setItems(actions.toTypedArray()) { _,which -> when(actions[which]) {
-                "削除" -> confirm("選択した${selected.size}件を完全に削除しますか？") { val ids=selected.toList();val ws=ids.filter { id -> library.works().any { it.id==id } };val bs=ids-ws.toSet();busy("削除しています") { library.delete(true,ws);library.delete(false,bs) } }
-                "書き出し" -> { exportFolders=allWorks||!allBooks;exportBooks=library.books().filter { it.id in selected||it.work in selected };pickTree(14) }
+                "削除" -> { val ids=selected.toList();val folders=library.works().filter { it.id in ids };val detail=if(folders.isEmpty()) "" else "\nフォルダ（${folders.joinToString { it.name }}）と、その中のサブフォルダ・PDFも削除されます。対象PDF：${library.selectedBooks(ids).size}冊。";confirm("選択した${ids.size}件を完全に削除しますか？$detail") { busy("削除しています") { library.deleteItems(ids) } } }
+                "移動" -> moveDialog(selected.toList())
+                "書き出し" -> { exportFolders=allWorks||!allBooks;exportBooks=library.selectedBooks(selected);pickTree(14) }
                 "共有" -> share(library.books().filter { it.id in selected })
                 "名前変更" -> { val id=selected.first();val isWork=library.works().any { it.id==id };val name=if(isWork) library.works().first { it.id==id }.name else library.book(id)!!.name;input("名前変更",name) { value -> try { library.rename(isWork,id,value);rememberGrid();showLibrary() } catch(e: Exception) { message("名前を変更できませんでした") } } }
             } }.show()
         })
         bar.addView(button("解除") { selected.clear();updateSelection(bar);(grid!!.adapter as Cards).notifyDataSetChanged() })
     }
+    private fun moveDialog(ids: List<String>,location: String?=null) {
+        val foldersSelected=library.works().any { it.id in ids }
+        val places=if(location==null) library.orderedWorks() else if(foldersSelected) emptyList() else library.children(location).sortedWith { a,b -> NaturalOrder.compare(a.name,b.name) }
+        val body=vertical();body.addView(text(if(location==null) "親フォルダを開いて移動先を選択" else library.path(location),16f).apply { setPadding(d(16),d(12),d(16),d(12)) })
+        val list=ListView(this);body.addView(list,LinearLayout.LayoutParams(-1,d(240)))
+        list.adapter=ArrayAdapter(this,android.R.layout.simple_list_item_1,places.map { it.name })
+        val builder=AlertDialog.Builder(this).setTitle("${ids.size}件を移動").setView(body).setNegativeButton("キャンセル",null)
+        if(location!=null) builder.setNeutralButton("←") { _,_ -> moveDialog(ids,library.work(location).parent) }
+        if(location!=null) builder.setPositiveButton("ここに移動",null)
+        val dialog=builder.create()
+        list.setOnItemClickListener { _,_,index,_ -> dialog.dismiss();moveDialog(ids,places[index].id) }
+        dialog.setOnShowListener {
+            if(location!=null) dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                AlertDialog.Builder(this).setMessage("ここに移動しますか？\n${library.path(location)}\n同名の項目がある場合は、連番を付けて両方を保持します。")
+                    .setNegativeButton("キャンセル",null).setPositiveButton("移動") { _,_ -> dialog.dismiss();busy("移動しています") { library.move(ids,location) } }.show()
+            }
+        };dialog.show()
+    }
     private fun share(books: List<Book>) {
         val uris=ArrayList(books.map { Uri.Builder().scheme("content").authority("jp.local.imagepdf.share").appendPath(it.id).appendPath(it.name).build() })
         val intent=Intent(if(uris.size==1) Intent.ACTION_SEND else Intent.ACTION_SEND_MULTIPLE).apply { type="application/pdf";addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);if(uris.size==1) putExtra(Intent.EXTRA_STREAM,uris[0]) else putParcelableArrayListExtra(Intent.EXTRA_STREAM,uris);clipData=ClipData.newUri(contentResolver,"PDF",uris[0]).apply { uris.drop(1).forEach { addItem(ClipData.Item(it)) } } };startActivity(Intent.createChooser(intent,"PDFを共有"))
     }
-    private fun currentSort()=if(page=="work") library.works().first { it.id==workId }.sort else library.sort
+    private fun currentSort()=if(page=="work") library.work(workId!!).let { if(it.parent==null) it.sort else "name" } else library.sort
     private fun sortDialog() {
         val labels=arrayOf("名前順","最近読んだ順","更新日時順","手動順");val modes=listOf("name","read","updated","manual")
         AlertDialog.Builder(this).setTitle("並び替え").setSingleChoiceItems(labels,modes.indexOf(currentSort())) { dialog,index ->
@@ -157,10 +176,11 @@ class MainActivity: Activity() {
         }.setNegativeButton("閉じる",null).show()
     }
     private fun addMenu(home: Boolean) {
-        val options=if(home) arrayOf("新しい作品フォルダ","PDFをインポート","端末のフォルダをインポート") else arrayOf("PDFを追加","端末フォルダ内PDFを追加")
+        val canCreate=home||library.work(workId!!).parent==null
+        val options=if(canCreate) arrayOf("新しい作品フォルダ",if(home) "PDFをインポート" else "PDFを追加",if(home) "端末のフォルダをインポート" else "端末フォルダ内PDFを追加") else arrayOf("PDFを追加","端末フォルダ内PDFを追加")
         AlertDialog.Builder(this).setItems(options) { _,index -> when {
-            home&&index==0 -> input("新しい作品フォルダ") { library.createWork(it);rememberGrid();showLibrary() }
-            (home&&index==2)||(!home&&index==1) -> pickTree(11)
+            canCreate&&index==0 -> input("新しい作品フォルダ") { library.createWork(it,if(home) null else workId);rememberGrid();showLibrary() }
+            (canCreate&&index==2)||(!canCreate&&index==1) -> pickTree(11)
             else -> pickPdf()
         } }.show()
     }
@@ -179,7 +199,7 @@ class MainActivity: Activity() {
     }
     private fun chooseTarget(sources: List<Library.Source>,externalAfter: Uri?) {
         importTarget?.let { startImport(sources,it,null,externalAfter);return }
-        val works=library.orderedWorks();val names=works.map { it.name }+"新しい作品フォルダ"
+        val works=library.orderedWorks().flatMap { listOf(it)+library.children(it.id).sortedWith { a,b -> NaturalOrder.compare(a.name,b.name) } };val names=works.map { library.path(it.id) }+"新しい作品フォルダ"
         AlertDialog.Builder(this).setTitle("保存先の作品").setItems(names.toTypedArray()) { _,which -> if(which==works.size) input("新しい作品フォルダ") { startImport(sources,null,it,externalAfter) } else startImport(sources,works[which].id,null,externalAfter) }.setNegativeButton("キャンセル",null).show()
     }
     private fun startImport(sources: List<Library.Source>,target: String?,name: String?,externalAfter: Uri?=null) {
@@ -245,7 +265,7 @@ class MainActivity: Activity() {
         if(reader!=null) { closeReader();return }
         if(page=="settings") { if(draft!=library.settings()) confirm("未保存の変更を破棄しますか？") { page="home";showLibrary() } else { page="home";showLibrary() };return }
         if(selected.isNotEmpty()) { rememberGrid();showLibrary();return }
-        if(page=="work"||page=="search") { rememberGrid();page="home";workId=null;showLibrary();return }
+        if(page=="work"||page=="search") { rememberGrid();val parent=if(page=="work") library.work(workId!!).parent else null;page=if(parent==null) "home" else "work";workId=parent;showLibrary();return }
         if(page=="onboarding") return
         super.onBackPressed()
     }

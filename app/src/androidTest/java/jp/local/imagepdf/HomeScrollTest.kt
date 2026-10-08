@@ -28,6 +28,7 @@ class HomeScrollTest {
         val p=pdf.startPage(PdfDocument.PageInfo.Builder(600,900,1).create());pdf.finishPage(p);file.outputStream().use{pdf.writeTo(it)};pdf.close()
         // An external PDF bypasses auto-reopening and marking a user's book as read.
         activity=instrumentation.startActivitySync(Intent(context,MainActivity::class.java).setAction(Intent.ACTION_VIEW).setData(Uri.fromFile(file)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
+        ui { activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON) }
         invoke("closeReader");instrumentation.waitForIdleSync()
         library=Library(Sandbox(context));library.onboarding=true;library.saveSettings(Preferences(reopen=false));library.columns=2
         for(i in 0 until 120) library.createWork("作品 ${i.toString().padStart(3,'0')}")
